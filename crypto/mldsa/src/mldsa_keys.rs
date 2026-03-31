@@ -1379,6 +1379,10 @@ impl MLDSA87PrivateKey {
         self.0.has_t0()
     }
 
+    pub fn public_key_hash(&self) -> [u8; 64] {
+        self.0.tr
+    }
+
     pub fn to_compact(&self) -> Self {
         Self(self.0.to_compact())
     }

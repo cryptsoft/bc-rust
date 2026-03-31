@@ -1479,6 +1479,59 @@ impl MLDSA87 {
         Ok((MLDSA87PublicKey(pk), MLDSA87PrivateKey(sk)))
     }
 
+    /// Expand only the seed-backed private key material required for signing.
+    pub fn private_key_from_seed(
+        seed: &KeyMaterialSized<32>,
+    ) -> Result<MLDSA87PrivateKey, SignatureError> {
+        Ok(MLDSA87PrivateKey(MLDSA87impl::private_key_from_seed_internal(seed)?))
+    }
+
+    /// Same as [private_key_from_seed], but takes a raw 32-byte seed.
+    pub fn private_key_from_seed_bytes(
+        seed: &[u8; 32],
+    ) -> Result<MLDSA87PrivateKey, SignatureError> {
+        let seed = KeyMaterial256::from_bytes_as_type(seed, KeyType::Seed)
+            .map_err(|_| SignatureError::KeyGenError("Invalid ML-DSA seed material"))?;
+        Self::private_key_from_seed(&seed)
+    }
+
+    /// Encode the public key directly from the seed without constructing a full `MLDSA87PublicKey`.
+    pub fn pk_encode_from_seed(
+        seed: &KeyMaterialSized<32>,
+    ) -> Result<[u8; MLDSA87_PK_LEN], SignatureError> {
+        let mut out = [0u8; MLDSA87_PK_LEN];
+        MLDSA87impl::pk_encode_from_seed_internal(seed, &mut out)?;
+        Ok(out)
+    }
+
+    /// Same as [pk_encode_from_seed], but takes a raw 32-byte seed.
+    pub fn pk_encode_from_seed_bytes(
+        seed: &[u8; 32],
+    ) -> Result<[u8; MLDSA87_PK_LEN], SignatureError> {
+        let seed = KeyMaterial256::from_bytes_as_type(seed, KeyType::Seed)
+            .map_err(|_| SignatureError::KeyGenError("Invalid ML-DSA seed material"))?;
+        Self::pk_encode_from_seed(&seed)
+    }
+
+    /// Encode the public key directly from the seed into the provided output buffer.
+    pub fn pk_encode_from_seed_out(
+        seed: &KeyMaterialSized<32>,
+        output: &mut [u8; MLDSA87_PK_LEN],
+    ) -> Result<(), SignatureError> {
+        MLDSA87impl::pk_encode_from_seed_internal(seed, output)?;
+        Ok(())
+    }
+
+    /// Same as [pk_encode_from_seed_out], but takes a raw 32-byte seed.
+    pub fn pk_encode_from_seed_bytes_out(
+        seed: &[u8; 32],
+        output: &mut [u8; MLDSA87_PK_LEN],
+    ) -> Result<(), SignatureError> {
+        let seed = KeyMaterial256::from_bytes_as_type(seed, KeyType::Seed)
+            .map_err(|_| SignatureError::KeyGenError("Invalid ML-DSA seed material"))?;
+        Self::pk_encode_from_seed_out(&seed, output)
+    }
+
     /// Imports a secret key from both a seed and an encoded_sk.
     ///
     /// This is a convenience function to expand the key from seed and compare it against
@@ -1617,6 +1670,28 @@ impl MLDSA87 {
         output: &mut [u8; MLDSA87_SIG_LEN],
     ) -> Result<usize, SignatureError> {
         MLDSA87impl::sign_mu_deterministic_out(&sk.0, mu, rnd, output)
+    }
+
+    pub fn verify_mu(
+        pk: &MLDSA87PublicKey,
+        mu: &[u8; 64],
+        sig: &[u8; MLDSA87_SIG_LEN],
+    ) -> Result<(), SignatureError> {
+        if MLDSA87impl::verify_mu_internal(&pk.0, mu, sig) {
+            Ok(())
+        } else {
+            Err(SignatureError::SignatureVerificationFailed)
+        }
+    }
+
+    pub fn verify(
+        pk: &MLDSA87PublicKey,
+        msg: &[u8],
+        ctx: &[u8],
+        sig: &[u8; MLDSA87_SIG_LEN],
+    ) -> Result<(), SignatureError> {
+        let mu = MuBuilder::compute_mu(msg, ctx, &pk.0.compute_tr())?;
+        Self::verify_mu(pk, &mu, sig)
     }
 }
 

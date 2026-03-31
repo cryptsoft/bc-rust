@@ -33,8 +33,8 @@ mod mldsa_tests {
         /* MLDSA87 */
         let (pk, sk) = MLDSA87::keygen().unwrap();
         let sig_val = MLDSA87::sign(&sk, msg, &[0u8; 0]).unwrap();
-        MLDSA87::verify(&pk, msg, &[0u8; 0], &sig_val).unwrap();
-    }
+       MLDSA87::verify(&pk, msg, &[0u8; 0], sig_val[..].try_into().unwrap()).unwrap();
+      }
 
     #[test]
     fn rfc9881_keygen() {
