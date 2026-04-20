@@ -309,6 +309,9 @@
 //! is still larger).
 //! Contact us if you need such a thing implemented.
 
+use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::TryInto;
 use core::marker::PhantomData;
 use crate::aux_functions::{sample_in_ball, bitpack_gamma1, bitlen_eta, unpack_h_row, unpack_c_tilde};
 use crate::low_memory_helpers::{compute_ct0_component, compute_w0cs2_component, compute_w_row, compute_wp_approx_row, compute_z_component, s_unpack};
@@ -316,9 +319,12 @@ use crate::mldsa_keys::{MLDSAPublicKeyTrait, MLDSAPublicKeyInternalTrait};
 use crate::mldsa_keys::{MLDSAPrivateKeyTrait, MLDSAPrivateKeyInternalTrait};
 use crate::{MLDSA44PublicKey, MLDSA44PrivateKey, MLDSA65PublicKey, MLDSA65PrivateKey, MLDSA87PublicKey, MLDSA87PrivateKey};
 use bouncycastle_core_interface::errors::SignatureError;
-use bouncycastle_core_interface::key_material::{KeyMaterialSized};
-use bouncycastle_core_interface::traits::{RNG, SecurityStrength, XOF, Signature, Algorithm};
-use bouncycastle_rng::{HashDRBG_SHA512};
+use bouncycastle_core_interface::key_material::{KeyMaterial, KeyMaterialSized};
+use bouncycastle_core_interface::traits::{SecurityStrength, XOF, Signature, Algorithm};
+#[cfg(feature = "os_rng")]
+use bouncycastle_core_interface::traits::RNG;
+#[cfg(feature = "os_rng")]
+use bouncycastle_rng::HashDRBG_SHA512;
 use bouncycastle_sha3::{SHAKE128, SHAKE256};
 
 
@@ -656,6 +662,7 @@ impl<
 >
 {
     /// Should still be ok in FIPS mode
+    #[cfg(feature = "os_rng")]
     pub fn keygen_from_os_rng() -> Result<
         (PK, SK),
         SignatureError,
@@ -683,6 +690,66 @@ impl<
         let pk = sk.derive_pk();
         let pk = PK::new(&pk.rho, &pk.t1_packed); // stupid conversion, but it gets around these overly-generified rust types
         Ok((pk, sk))
+    }
+
+    pub fn pk_encode_from_seed_bytes(
+        seed: &[u8; 32],
+    ) -> Result<[u8; PK_LEN], SignatureError> {
+        let sk = Self::private_key_from_seed_bytes(seed)?;
+        let derived_pk = sk.derive_pk();
+        Ok(PK::new(&derived_pk.rho, &derived_pk.t1_packed).pk_encode())
+    }
+
+    pub fn private_key_from_seed_bytes(
+        seed: &[u8; 32],
+    ) -> Result<SK, SignatureError> {
+        let mut km = KeyMaterialSized::<32>::new();
+        km.allow_hazardous_operations();
+        km.set_bytes_as_type(seed, bouncycastle_core_interface::key_material::KeyType::Seed)?;
+        km.set_security_strength(SecurityStrength::from_bits(LAMBDA as usize))?;
+        km.drop_hazardous_operations();
+        SK::from_keymaterial(&km)
+    }
+
+    pub fn sign_mu_deterministic_out(
+        sk: &SK,
+        mu: &[u8; 64],
+        rnd: [u8; 32],
+        output: &mut [u8; SIG_LEN],
+    ) -> Result<usize, SignatureError> {
+        <Self as MLDSATrait<
+            PK_LEN,
+            SK_LEN,
+            SIG_LEN,
+            PK,
+            SK,
+            LAMBDA,
+            GAMMA2,
+            k,
+            l,
+            S1_PACKED_LEN,
+            S2_PACKED_LEN,
+            T1_PACKED_LEN,
+            ETA,
+        >>::sign_mu_deterministic_out(sk, mu, rnd, output)
+    }
+
+    pub fn verify_mu(
+        pk: &PK,
+        mu: &[u8; 64],
+        sig: &[u8],
+    ) -> Result<(), SignatureError> {
+        if sig.len() != SIG_LEN {
+            return Err(SignatureError::LengthError(
+                "Signature value is not the correct length.",
+            ));
+        }
+        let sig_sized: &[u8; SIG_LEN] = sig[..SIG_LEN].try_into().unwrap();
+        if Self::verify_mu_internal(pk, mu, sig_sized) {
+            Ok(())
+        } else {
+            Err(SignatureError::SignatureVerificationFailed)
+        }
     }
 }
 
@@ -864,10 +931,16 @@ impl<
         mu: &[u8; 64],
         output: &mut [u8; SIG_LEN],
     ) -> Result<usize, SignatureError> {
-        let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
-        HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
-
-        Self::sign_mu_deterministic_out(sk, mu, rnd, output)
+        #[cfg(feature = "os_rng")]
+        {
+            let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
+            HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
+            return Self::sign_mu_deterministic_out(sk, mu, rnd, output);
+        }
+        #[cfg(not(feature = "os_rng"))]
+        {
+            Self::sign_mu_deterministic_out(sk, mu, [0u8; RND_LEN], output)
+        }
     }
 
     fn sign_mu_deterministic(sk: &SK, mu: &[u8; 64], rnd: [u8; 32]) -> Result<[u8; SIG_LEN], SignatureError> {
@@ -958,11 +1031,6 @@ impl<
             output.fill(0);
             output[..LAMBDA_over_4].copy_from_slice(&sig_val_c_tilde);
 
-            let (z_chunks, z_remainder) = output[z_offset..z_offset + l * POLY_Z_PACKED_LEN]
-                .as_chunks_mut::<POLY_Z_PACKED_LEN>();
-            debug_assert_eq!(z_chunks.len(), l);
-            debug_assert_eq!(z_remainder.len(), 0);
-
             // 18-23 (z path): compute and encode each z polynomial directly into the caller buffer.
             let mut rejected = false;
             for col in 0..l {
@@ -980,7 +1048,11 @@ impl<
                     }
                 };
 
-                bitpack_gamma1::<POLY_Z_PACKED_LEN, GAMMA1>(&z, &mut z_chunks[col]);
+                let chunk_start = z_offset + col * POLY_Z_PACKED_LEN;
+                let chunk_end = chunk_start + POLY_Z_PACKED_LEN;
+                let z_chunk: &mut [u8; POLY_Z_PACKED_LEN] =
+                    (&mut output[chunk_start..chunk_end]).try_into().unwrap();
+                bitpack_gamma1::<POLY_Z_PACKED_LEN, GAMMA1>(&z, z_chunk);
             }
 
             if rejected {
@@ -1406,7 +1478,16 @@ impl<
 > {
 
     fn keygen() -> Result<(PK, SK), SignatureError> {
-        Self::keygen_from_os_rng()
+        #[cfg(feature = "os_rng")]
+        {
+            Self::keygen_from_os_rng()
+        }
+        #[cfg(not(feature = "os_rng"))]
+        {
+            Err(SignatureError::GenericError(
+                "keygen() requires the `os_rng` feature",
+            ))
+        }
     }
 
     fn sign(sk: &SK, msg: &[u8], ctx: Option<&[u8]>) -> Result<Vec<u8>, SignatureError> {
@@ -1444,7 +1525,7 @@ impl<
     fn sign_final(self) -> Result<Vec<u8>, SignatureError> {
         let mut out = [0u8; SIG_LEN];
         self.sign_final_out(&mut out)?;
-        Ok(Vec::from(out))
+        Ok(out.to_vec())
     }
 
     fn sign_final_out(self, output: &mut [u8]) -> Result<usize, SignatureError> {
@@ -1467,9 +1548,14 @@ impl<
             let rnd = if self.signer_rnd.is_some() {
                 self.signer_rnd.unwrap()
             } else {
-                let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
-                HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
-                rnd
+                #[cfg(feature = "os_rng")]
+                {
+                    let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
+                    HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
+                    rnd
+                }
+                #[cfg(not(feature = "os_rng"))]
+                { [0u8; RND_LEN] }
             };
             Self::sign_mu_deterministic_from_seed_out(&self.seed.unwrap(), &mu, rnd, output_sized)
         } else { unreachable!() }

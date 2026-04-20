@@ -1,4 +1,7 @@
 use crate::SHA2Params;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::TryInto;
 use core::slice;
 use bouncycastle_core_interface::errors::HashError;
 use bouncycastle_core_interface::traits::{Hash, SecurityStrength};
@@ -61,7 +64,7 @@ fn theta1(x: u64) -> u64 {
 // #[derive(Clone, Copy)]
 #[derive(Clone)]
 pub(crate) struct Sha512State<PARAMS: SHA2Params> {
-    _params: std::marker::PhantomData<PARAMS>,
+    _params: core::marker::PhantomData<PARAMS>,
     h: [u64; 8],
 }
 
@@ -75,14 +78,14 @@ impl<PARAMS: SHA2Params> Sha512State<PARAMS> {
     pub(crate) fn new() -> Self {
         match PARAMS::OUTPUT_LEN * 8 {
             384 => Self {
-                _params: std::marker::PhantomData,
+                _params: core::marker::PhantomData,
                 h: [
                     0xCBBB9D5DC1059ED8, 0x629A292A367CD507, 0x9159015A3070DD17, 0x152FECD8F70E5939,
                     0x67332667FFC00B31, 0x8EB44A8768581511, 0xDB0C2E0D64F98FA7, 0x47B5481DBEFA4FA4,
                 ],
             },
             512 => Self {
-                _params: std::marker::PhantomData,
+                _params: core::marker::PhantomData,
                 h: [
                     0x6A09E667F3BCC908, 0xBB67AE8584CAA73B, 0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
                     0x510E527FADE682D1, 0x9B05688C2B3E6C1F, 0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179,
@@ -99,9 +102,8 @@ impl<PARAMS: SHA2Params> Sha512State<PARAMS> {
         let &mut [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = s;
 
         for block in blocks {
-            let (chunks, _remainder) = block.as_chunks::<8>();
-            for (i, w) in x[..16].iter_mut().zip(chunks) {
-                *i = u64::from_be_bytes(*w);
+            for (i, chunk) in x[..16].iter_mut().zip(block.chunks_exact(8)) {
+                *i = u64::from_be_bytes(chunk.try_into().unwrap());
             }
 
             for i in 16..80 {
@@ -161,7 +163,7 @@ impl<PARAMS: SHA2Params> Sha512State<PARAMS> {
 // #[derive(Clone, Copy)]
 #[derive(Clone)]
 pub struct Sha512Internal<PARAMS: SHA2Params> {
-    _params: std::marker::PhantomData<PARAMS>,
+    _params: core::marker::PhantomData<PARAMS>,
     state: Sha512State<PARAMS>,
     byte_count: u64, // NOTE We only support 2^67 bits, not the full 2^128
     x_buf: [u8; 128],
@@ -177,7 +179,7 @@ impl<PARAMS: SHA2Params> Drop for Sha512Internal<PARAMS> {
 impl<PARAMS: SHA2Params> Sha512Internal<PARAMS> {
     pub fn new() -> Self {
         Self {
-            _params: std::marker::PhantomData,
+            _params: core::marker::PhantomData,
             state: Sha512State::<PARAMS>::new(),
             byte_count: 0,
             x_buf: [0; 128],
@@ -236,10 +238,14 @@ impl<PARAMS: SHA2Params> Hash for Sha512Internal<PARAMS> {
             //self.x_buf_off = 0;
         }
 
-        let (chunks, remainder) = block.as_chunks::<128>();
-
-        self.state.compress(chunks);
-
+        let full_len = (block.len() / 128) * 128;
+        let mut idx = 0;
+        while idx < full_len {
+            let chunk: &[u8; 128] = (&block[idx..idx + 128]).try_into().unwrap();
+            self.state.compress(slice::from_ref(chunk));
+            idx += 128;
+        }
+        let remainder = &block[full_len..];
         let remaining = remainder.len();
         self.x_buf[..remaining].copy_from_slice(remainder);
         self.x_buf_off = remaining;
@@ -276,7 +282,7 @@ impl<PARAMS: SHA2Params> Hash for Sha512Internal<PARAMS> {
         for i in 0..(n / 8) {
             output[i * 8..i * 8 + 8].copy_from_slice(&h[i].to_be_bytes());
         }
-        if !n.is_multiple_of(8) {
+        if n % 8 != 0 {
             output[((n / 8) * 8)..((n / 8) * 8) + (n % 8)]
                 .copy_from_slice(&h[n / 8].to_be_bytes()[0..(n % 8)]);
         }

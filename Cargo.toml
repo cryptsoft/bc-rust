@@ -1,5 +1,14 @@
 [workspace]
 members = [ "cli", "crypto/*" ]
+exclude = [
+    "crypto/utils",
+    "crypto/core-interface",
+    "crypto/sha2",
+    "crypto/sha3",
+    "crypto/rng",
+    "crypto/mldsa",
+    "crypto/mldsa_lowmemory",
+]
 
 [workspace.package]
 edition = "2024"

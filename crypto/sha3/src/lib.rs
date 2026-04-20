@@ -104,8 +104,12 @@
 //! [KeyType::BytesFullEntropy] since the input [KeyMaterialSized] is 16 bytes but [SHA3_256] needs at least 32 bytes of
 //! full-entropy input key material in order to be able to produce full entropy output key material.
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
+#![allow(unknown_lints)]
 #![allow(private_bounds)]
+
+extern crate alloc;
 
 use crate::keccak::{KeccakSize};
 use bouncycastle_core_interface::traits::{Algorithm, HashAlgParams, SecurityStrength};
@@ -142,7 +146,7 @@ pub type SHAKE256 = SHAKE<SHAKE256Params>;
 /*** Param traits ***/
 
 /// Private trait on purpose so that only the NIST-approved params can be used.
-trait SHA3Params: HashAlgParams {
+pub trait SHA3Params: HashAlgParams {
     const SIZE: KeccakSize;
 }
 
@@ -238,7 +242,7 @@ impl SHA3Params for SHA3_512Params {
     const SIZE: KeccakSize = KeccakSize::_512;
 }
 
-trait SHAKEParams: Algorithm {
+pub trait SHAKEParams: Algorithm {
     const SIZE: KeccakSize;
 }
 pub struct SHAKE128Params;

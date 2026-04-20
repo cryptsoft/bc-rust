@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+use core::convert::TryInto;
 use crate::aux_functions::{bit_pack_eta, bitlen_eta, power_2_round, rej_bounded_poly, rej_ntt_poly, simple_bit_pack_t1, simple_bit_unpack_t1};
 use crate::mldsa::{H, N};
 use crate::{ML_DSA_44_NAME, ML_DSA_65_NAME, ML_DSA_87_NAME};
@@ -62,7 +64,7 @@ pub trait MLDSAPublicKeyTrait<const k: usize, const T1_PACKED_LEN: usize, const 
     fn compute_tr(&self) -> [u8; 64];
 }
 
-pub(crate) trait MLDSAPublicKeyInternalTrait<const k: usize, const T1_PACKED_LEN: usize, const PK_LEN: usize> {
+pub trait MLDSAPublicKeyInternalTrait<const k: usize, const T1_PACKED_LEN: usize, const PK_LEN: usize> {
     /// Not exposing a constructor publicly because you should have to get an instance either by
     /// running a keygen, or by decoding an existing key.
     fn new(rho: &[u8; 32], t1_packed: &[u8; T1_PACKED_LEN]) -> Self;
@@ -128,6 +130,18 @@ impl<const k: usize, const T1_PACKED_LEN: usize, const PK_LEN: usize> MLDSAPubli
         H::new().hash_xof_out(&self.pk_encode(), &mut tr);
 
         tr
+    }
+}
+
+impl<const k: usize, const T1_PACKED_LEN: usize, const PK_LEN: usize>
+    MLDSAPublicKey<k, T1_PACKED_LEN, PK_LEN>
+{
+    pub fn from_pk_bytes(bytes: &[u8; PK_LEN]) -> Self {
+        <Self as MLDSAPublicKeyTrait<k, T1_PACKED_LEN, PK_LEN>>::pk_decode(bytes)
+    }
+
+    pub fn compute_tr(&self) -> [u8; 64] {
+        <Self as MLDSAPublicKeyTrait<k, T1_PACKED_LEN, PK_LEN>>::compute_tr(self)
     }
 }
 
@@ -376,6 +390,10 @@ impl<
     const PK_LEN: usize,
     const SK_LEN: usize,
 > MLDSASeedPrivateKey<LAMBDA, GAMMA2, k, l, eta, S1_PACKED_LEN, S2_PACKED_LEN, T1_PACKED_LEN, PK_LEN, SK_LEN> {
+    pub fn public_key_hash(&self) -> [u8; 64] {
+        <Self as MLDSAPrivateKeyTrait<k, l, S1_PACKED_LEN, S2_PACKED_LEN, T1_PACKED_LEN, PK_LEN, SK_LEN>>::tr(self)
+    }
+
     /// Create a new MLDSASeedPrivateKey from a 32-byte KeyMaterial.
     pub fn new(seed: &KeyMaterialSized<32>) -> Result<Self, SignatureError> {
         if !(seed.key_type() == KeyType::Seed || seed.key_type() == KeyType::BytesFullEntropy)
@@ -563,7 +581,7 @@ for MLDSASeedPrivateKey<LAMBDA, GAMMA2, k, l, eta, S1_PACKED_LEN, S2_PACKED_LEN,
     }
 }
 
-pub(crate) trait MLDSAPrivateKeyInternalTrait<
+pub trait MLDSAPrivateKeyInternalTrait<
     const LAMBDA: i32,
     const GAMMA2: i32,
     const k: usize,
@@ -670,7 +688,8 @@ for MLDSASeedPrivateKey<LAMBDA, GAMMA2, k, l, eta, S1_PACKED_LEN, S2_PACKED_LEN,
     ) -> Polynomial {
         let mut t0 = self.compute_t_row(idx, s1_packed, s2_packed);
         for j in 0..N {
-            (_, t0.0[j]) = power_2_round(t0.0[j]);
+            let (_hi, lo) = power_2_round(t0.0[j]);
+            t0.0[j] = lo;
         }
 
         t0
@@ -684,7 +703,8 @@ for MLDSASeedPrivateKey<LAMBDA, GAMMA2, k, l, eta, S1_PACKED_LEN, S2_PACKED_LEN,
     ) -> Polynomial {
         let mut t1 = self.compute_t_row(idx, s1_packed, s2_packed);
         for j in 0..N {
-            (t1.0[j], _) = power_2_round(t1.0[j]);
+            let (hi, _lo) = power_2_round(t1.0[j]);
+            t1.0[j] = hi;
         }
 
         t1

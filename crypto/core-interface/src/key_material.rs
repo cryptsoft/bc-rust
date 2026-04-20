@@ -41,8 +41,8 @@ use crate::errors::KeyMaterialError;
 use crate::traits::{RNG, SecurityStrength, Secret};
 use bouncycastle_utils::{ct, max, min};
 
-use std::cmp::{Ordering, PartialOrd};
-use std::fmt;
+use core::cmp::{Ordering, PartialOrd};
+use core::fmt;
 
 /// Sometimes you just need a zero-length dummy key.
 pub type KeyMaterial0 = KeyMaterialSized<0>;

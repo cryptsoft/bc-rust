@@ -1,6 +1,8 @@
 //! Provides simplified abstracted APIs over classes of cryptigraphic primitives, such as Hash, KDF, etc.
 
-use std::fmt::{Debug, Display};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::fmt::{Debug, Display};
 use crate::errors::{HashError, KDFError, MACError, RNGError, SignatureError};
 pub use crate::key_material::KeyMaterial;
 

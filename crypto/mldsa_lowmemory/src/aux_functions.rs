@@ -1,5 +1,6 @@
 //! Implements auxiliary functions for ML-DSA as defined in Section 7 of FIPS 204.
 
+use core::convert::TryInto;
 // use crate::matrix::{Matrix, Vector};
 use crate::mldsa::{G, H};
 use crate::mldsa::{

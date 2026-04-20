@@ -197,7 +197,7 @@ pub(super) struct KeccakDigest {
 }
 
 #[derive(Clone)]
-pub(crate) enum KeccakSize {
+pub enum KeccakSize {
     _128 = 128,
     _224 = 224,
     _256 = 256,
@@ -299,10 +299,8 @@ impl KeccakDigest {
     fn keccak_extract(&mut self) {
         KeccakState::permute(&mut self.state);
 
-        let (chunks, _) = self.data_queue.as_chunks_mut::<8>();
-
-        for (i, chunk) in chunks.iter_mut().enumerate() {
-            *chunk = self.state.buf[i].to_le_bytes();
+        for (i, chunk) in self.data_queue.chunks_exact_mut(8).enumerate() {
+            chunk.copy_from_slice(&self.state.buf[i].to_le_bytes());
         }
 
         self.bits_in_queue = self.rate;

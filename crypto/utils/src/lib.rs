@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+#![feature(bench_black_box)]
 #![forbid(unsafe_code)]
 
 pub mod ct;

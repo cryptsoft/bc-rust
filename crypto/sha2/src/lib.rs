@@ -33,8 +33,12 @@
 //! let output: Vec<u8> = sha2.do_final();
 //! ```
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
+#![allow(unknown_lints)]
 #![allow(private_bounds)]
+
+extern crate alloc;
 
 mod sha256;
 mod sha512;
@@ -57,7 +61,7 @@ pub type SHA512 = Sha512Internal<SHA512Params>;
 
 /*** Param traits ***/
 
-trait SHA2Params: HashAlgParams {}
+pub trait SHA2Params: HashAlgParams {}
 
 impl Algorithm for SHA224 {
     const ALG_NAME: &'static str = SHA224_NAME;

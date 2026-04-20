@@ -87,62 +87,64 @@
 //! of the Rust compiler's optimizer for whether our bitshift-and-xor code actually remains
 //! constant-time after compilation.
 
-
-#![forbid(missing_docs)]
-
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
-#![allow(incomplete_features)] // needed because currently generic_const_exprs is experimental
-#![feature(generic_const_exprs)]
-#![feature(adt_const_params)]
 
 // These are because I'm matching variable names exactly against FIPS 204, for example both 'K' and 'k',
 // or 'A' and 'a' are used and have specific meanings.
 // But need to tell the rust linter to not care.
+#![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
 // so I can use private traits to hide internal stuff that needs to be generic within the
 // MLDSA implementation, but I don't want accessed from outside, such as FIPS-internal functions.
-#![allow(private_bounds)]
 
 // Used in HashMLDSA
-#![feature(unsized_const_params)]
 
 // imports needed just for docs
-#[allow(unused_imports)]
-use bouncycastle_core_interface::traits::{KeyMaterial, Signature, PHSignature};
-
-pub mod mldsa; // todo -- pub just to get the docs. Is that right? Or should I suck the docs up here?
-pub mod hash_mldsa; // todo -- pub just to get the docs. Is that right? Or should I suck the docs up here?
-mod mldsa_keys;
-mod polynomial;
-mod aux_functions;
-mod matrix;
-
 
 /*** Exported types ***/
-pub use mldsa::{MLDSATrait, MLDSA, MLDSA44, MLDSA65, MLDSA87};
-pub use hash_mldsa::{HashMLDSA44_with_SHA256, HashMLDSA65_with_SHA256, HashMLDSA87_with_SHA256};
-pub use hash_mldsa::{HashMLDSA44_with_SHA512, HashMLDSA65_with_SHA512, HashMLDSA87_with_SHA512};
-pub use mldsa_keys::{MLDSAPrivateKeyTrait, MLDSAPublicKeyTrait};
-pub use mldsa_keys::{MLDSAPublicKey, MLDSA44PublicKey, MLDSA65PublicKey, MLDSA87PublicKey};
-pub use mldsa_keys::{MLDSAPrivateKey, MLDSA44PrivateKey, MLDSA65PrivateKey, MLDSA87PrivateKey};
-pub use mldsa::{MuBuilder};
+pub use bouncycastle_mldsa_lowmemory::{MLDSATrait, MLDSA, MLDSA44, MLDSA65, MLDSA87};
+pub use bouncycastle_mldsa_lowmemory::{HashMLDSA44_with_SHA256, HashMLDSA65_with_SHA256, HashMLDSA87_with_SHA256};
+pub use bouncycastle_mldsa_lowmemory::{HashMLDSA44_with_SHA512, HashMLDSA65_with_SHA512, HashMLDSA87_with_SHA512};
+pub use bouncycastle_mldsa_lowmemory::{MLDSAPrivateKeyTrait, MLDSAPublicKeyTrait};
+pub use bouncycastle_mldsa_lowmemory::{MLDSAPublicKey, MLDSA44PublicKey, MLDSA65PublicKey, MLDSA87PublicKey};
+pub use bouncycastle_mldsa_lowmemory::MLDSASeedPrivateKey as MLDSAPrivateKey;
+pub use bouncycastle_mldsa_lowmemory::{MLDSASeedPrivateKey, MLDSA44PrivateKey, MLDSA65PrivateKey, MLDSA87PrivateKey};
 
 /*** Exported constants ***/
-pub use mldsa::ML_DSA_44_NAME;
-pub use mldsa::ML_DSA_65_NAME;
-pub use mldsa::ML_DSA_87_NAME;
+pub use bouncycastle_mldsa_lowmemory::ML_DSA_44_NAME;
+pub use bouncycastle_mldsa_lowmemory::ML_DSA_65_NAME;
+pub use bouncycastle_mldsa_lowmemory::ML_DSA_87_NAME;
 
-pub use hash_mldsa::Hash_ML_DSA_44_with_SHA256_NAME;
-pub use hash_mldsa::Hash_ML_DSA_65_with_SHA256_NAME;
-pub use hash_mldsa::Hash_ML_DSA_87_with_SHA256_NAME;
+pub use bouncycastle_mldsa_lowmemory::Hash_ML_DSA_44_with_SHA256_NAME;
+pub use bouncycastle_mldsa_lowmemory::Hash_ML_DSA_65_with_SHA256_NAME;
+pub use bouncycastle_mldsa_lowmemory::Hash_ML_DSA_87_with_SHA256_NAME;
 
-pub use hash_mldsa::Hash_ML_DSA_44_with_SHA512_NAME;
-pub use hash_mldsa::Hash_ML_DSA_65_with_SHA512_NAME;
-pub use hash_mldsa::Hash_ML_DSA_87_with_SHA512_NAME;
+pub use bouncycastle_mldsa_lowmemory::Hash_ML_DSA_44_with_SHA512_NAME;
+pub use bouncycastle_mldsa_lowmemory::Hash_ML_DSA_65_with_SHA512_NAME;
+pub use bouncycastle_mldsa_lowmemory::Hash_ML_DSA_87_with_SHA512_NAME;
 
-pub use mldsa::{TR_LEN, RND_LEN, MU_LEN};
-pub use mldsa::{MLDSA44_PK_LEN, MLDSA44_SK_LEN, MLDSA44_SIG_LEN};
-pub use mldsa::{MLDSA65_PK_LEN, MLDSA65_SK_LEN, MLDSA65_SIG_LEN};
-pub use mldsa::{MLDSA87_PK_LEN, MLDSA87_SK_LEN, MLDSA87_SIG_LEN};
+pub use bouncycastle_mldsa_lowmemory::{TR_LEN, RND_LEN, MU_LEN};
+pub use bouncycastle_mldsa_lowmemory::{MLDSA44_PK_LEN, MLDSA44_SK_LEN, MLDSA44_SIG_LEN};
+pub use bouncycastle_mldsa_lowmemory::{MLDSA65_PK_LEN, MLDSA65_SK_LEN, MLDSA65_SIG_LEN};
+pub use bouncycastle_mldsa_lowmemory::{MLDSA87_PK_LEN, MLDSA87_SK_LEN, MLDSA87_SIG_LEN};
+
+use bouncycastle_core_interface::errors::SignatureError;
+
+pub struct MuBuilder(bouncycastle_mldsa_lowmemory::MuBuilder);
+
+impl MuBuilder {
+    pub fn do_init(tr: &[u8; 64], ctx: &[u8]) -> Result<Self, SignatureError> {
+        bouncycastle_mldsa_lowmemory::MuBuilder::do_init(tr, Some(ctx)).map(MuBuilder)
+    }
+
+    pub fn do_update(&mut self, msg_chunk: &[u8]) {
+        self.0.do_update(msg_chunk)
+    }
+
+    pub fn do_final(self) -> [u8; 64] {
+        self.0.do_final()
+    }
+}

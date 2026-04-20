@@ -1,3 +1,6 @@
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
 use bouncycastle_core_interface::errors::{HashError, KDFError};
 use bouncycastle_core_interface::key_material::{KeyMaterialSized, KeyType};
 use bouncycastle_core_interface::traits::{Algorithm, KeyMaterial, SecurityStrength, KDF, XOF};
@@ -22,7 +25,7 @@ use crate::SHAKEParams;
 /// as such if the provided message includes the requested length, SHAKE does not implement the [Hash] trait.
 #[derive(Clone)]
 pub struct SHAKE<PARAMS: SHAKEParams> {
-    _phantomdata: std::marker::PhantomData<PARAMS>,
+    _phantomdata: core::marker::PhantomData<PARAMS>,
     keccak: KeccakDigest,
     kdf_key_type: KeyType,
     kdf_security_strength: SecurityStrength,
@@ -39,7 +42,7 @@ impl<PARAMS: SHAKEParams> Algorithm for SHAKE<PARAMS> {
 impl<PARAMS: SHAKEParams> SHAKE<PARAMS> {
     pub fn new() -> Self {
         Self {
-            _phantomdata: std::marker::PhantomData,
+            _phantomdata: core::marker::PhantomData,
             keccak: KeccakDigest::new(PARAMS::SIZE),
             kdf_key_type: KeyType::Zeroized,
             kdf_security_strength: SecurityStrength::None,

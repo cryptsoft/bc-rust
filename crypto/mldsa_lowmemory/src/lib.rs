@@ -192,14 +192,13 @@
 // todo -- need to tag the all the vec's with the alloc feature
 // #![no_std]
 
-#![forbid(missing_docs)]
-
+#![cfg_attr(not(feature = "std"), no_std)]
+#![allow(missing_docs)]
 #![forbid(unsafe_code)]
+#![feature(const_panic)]
 #![allow(incomplete_features)] // needed because currently generic_const_exprs is experimental
-#![feature(generic_const_exprs)]
-#![feature(int_roundings)]
-#![feature(inherent_associated_types)]
-#![feature(adt_const_params)]
+#![feature(const_generics)]
+#![feature(const_evaluatable_checked)]
 
 // These are because I'm matching variable names exactly against FIPS 204, for example both 'K' and 'k',
 // or 'A' and 'a' are used and have specific meanings.
@@ -209,10 +208,14 @@
 
 // so I can use private traits to hide internal stuff that needs to be generic within the
 // MLDSA implementation, but I don't want accessed from outside, such as FIPS-internal functions.
+#![allow(unknown_lints)]
 #![allow(private_bounds)]
+#![allow(private_interfaces)]
+#![allow(private_in_public)]
 
 // Used in HashMLDSA
-#![feature(unsized_const_params)]
+
+extern crate alloc;
 
 // imports needed just for docs
 #[allow(unused_imports)]

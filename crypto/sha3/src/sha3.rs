@@ -1,3 +1,6 @@
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
 use bouncycastle_core_interface::errors::{HashError, KDFError};
 use bouncycastle_core_interface::key_material::{KeyMaterialSized, KeyType};
 use bouncycastle_core_interface::traits::{Hash, KeyMaterial, SecurityStrength, KDF};
@@ -7,7 +10,7 @@ use crate::SHA3Params;
 
 #[derive(Clone)]
 pub struct SHA3<PARAMS: SHA3Params> {
-    _params: std::marker::PhantomData<PARAMS>,
+    _params: core::marker::PhantomData<PARAMS>,
     keccak: KeccakDigest,
     kdf_key_type: KeyType,
     kdf_security_strength: SecurityStrength,
@@ -19,7 +22,7 @@ pub struct SHA3<PARAMS: SHA3Params> {
 impl<PARAMS: SHA3Params> SHA3<PARAMS> {
     pub fn new() -> Self {
         Self {
-            _params: std::marker::PhantomData,
+            _params: core::marker::PhantomData,
             keccak: KeccakDigest::new(PARAMS::SIZE),
             kdf_key_type: KeyType::Zeroized,
             kdf_security_strength: SecurityStrength::None,
@@ -116,7 +119,7 @@ impl<PARAMS: SHA3Params> Hash for SHA3<PARAMS> {
 
     fn hash(self, data: &[u8]) -> Vec<u8> {
         let mut output: Vec<u8> = vec![0u8; PARAMS::OUTPUT_LEN];
-        _ = self.hash_internal(data, &mut output[..]);
+        let _ = self.hash_internal(data, &mut output[..]);
         output
     }
 

@@ -26,11 +26,12 @@
 //! since misuse of [Sp80090ADrbg::instantiate] can completely undermine the security of your entire
 //! cryptographic application.
 
+#![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 
-#![allow(incomplete_features)] // Need this because generic_const_exprs is currently experimental.
-#![feature(generic_const_exprs)]
+extern crate alloc;
 
+use alloc::vec::Vec;
 use bouncycastle_core_interface::errors::RNGError;
 use bouncycastle_core_interface::traits::{KeyMaterial, SecurityStrength};
 use crate::hash_drbg80090a::{HashDRBG80090A, HashDRBG80090AParams_SHA256, HashDRBG80090AParams_SHA512,};

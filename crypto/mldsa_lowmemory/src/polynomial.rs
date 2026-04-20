@@ -8,7 +8,7 @@ use crate::polynomial;
 
 // pub(crate) type Polynomial = [i32; N];
 #[derive(Clone)]
-pub(crate) struct Polynomial(pub(crate) [i32; N]);
+pub struct Polynomial(pub(crate) [i32; N]);
 
 impl Polynomial {
     pub(crate) const fn new() -> Self {
@@ -198,7 +198,6 @@ impl Polynomial {
 
                     // 𝑤𝑗+𝑙𝑒𝑛 ← (𝑧 ⋅ 𝑤𝑗+𝑙𝑒𝑛) mod 𝑞
                     self.0[j + len] = polynomial::montgomery_reduce(z as i64 * self.0[j + len] as i64);
-                    print!("");
                 }
                 start = start + 2 * len; // could be optimized to save the multiply-by-two since j finishes as `start + len`. That said 2* is just << 1, which is basically free.
             }
@@ -235,13 +234,13 @@ impl Drop for Polynomial {
 }
 
 impl Debug for Polynomial {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "Polynomial (data masked)")
     }
 }
 
 impl Display for Polynomial {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "Polynomial (data masked)")
     }
 }

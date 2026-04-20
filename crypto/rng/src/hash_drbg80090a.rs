@@ -1,26 +1,35 @@
 //! Implements Hash_DRBG (Deterministic Random Bit Generator) from NIST SP 800-90Ar1.
 
 // This is here cause HashDRBG80090AParams is private on purpose so that people can't instantiate new parameter sets other than the ones prescribed by NIST.
+#![allow(unknown_lints)]
 #![allow(private_bounds)]
+#![allow(private_interfaces)]
+#![allow(private_in_public)]
 
 use crate::Sp80090ADrbg;
 
+use alloc::vec;
+use alloc::vec::Vec;
 use bouncycastle_core_interface::errors::{KeyMaterialError, RNGError};
-use bouncycastle_core_interface::key_material::{KeyMaterial512, KeyType};
-use bouncycastle_core_interface::traits::{Hash, HashAlgParams, KeyMaterial, RNG, SecurityStrength};
+use bouncycastle_core_interface::key_material::KeyType;
+#[cfg(feature = "os_rng")]
+use bouncycastle_core_interface::key_material::KeyMaterial512;
+use bouncycastle_core_interface::traits::{Hash, HashAlgParams, KeyMaterial, SecurityStrength};
+#[cfg(feature = "os_rng")]
+use bouncycastle_core_interface::traits::RNG;
 use bouncycastle_sha2::{SHA256, SHA512};
 use bouncycastle_utils::min;
 
-use std::fmt::{Display, Formatter};
+use core::fmt::{Display, Formatter};
 
-enum SupportedHash {
+pub enum SupportedHash {
     SHA256,
     SHA512,
 }
 
 // By not making this pub, nobody else should be able to impl it;
 // ie the structs defined below will be the only allowed ones.
-trait HashDRBG80090AParams {
+pub trait HashDRBG80090AParams {
     const HASH: SupportedHash;
     // const OUT_LEN: usize;
     const MAX_SECURITY_STRENGTH: SecurityStrength;
@@ -71,6 +80,7 @@ pub struct HashDRBG80090A<H: HashDRBG80090AParams> {
     // state: WorkingState<H::SEED_LEN>,
     state: WorkingState<LARGEST_HASHER_OUTPUT_LEN>,
     admin_info: AdministrativeInfo,
+    _phantom: core::marker::PhantomData<H>,
 }
 
 struct WorkingState<const SEED_LEN: usize> {
@@ -83,6 +93,7 @@ struct WorkingState<const SEED_LEN: usize> {
 
 struct AdministrativeInfo {
     strength: SecurityStrength,
+    #[allow(dead_code)]
     prediction_resistance: bool,
     instantiated: bool,
 }
@@ -98,7 +109,7 @@ impl<const SEED_LEN: usize> Drop for WorkingState<SEED_LEN> {
 
 /// Explicit implementation of Display that prevents auto-generated ones from accidentally leaking secrets.
 impl<const SEED_LEN: usize> Display for WorkingState<SEED_LEN> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "HashDRBG80090A::WorkingState::<{}>", SEED_LEN)
     }
 }
@@ -113,6 +124,7 @@ fn test_working_state_display() {
 impl<H: HashDRBG80090AParams> HashDRBG80090A<H> {
     /// Creates a new instance using the local OS RNG as a source of seed entropy.
     /// Alias for [HashDRBG80090A::new_from_os].
+    #[cfg(feature = "os_rng")]
     pub fn new() -> Self {
         Self::new_from_os()
     }
@@ -133,22 +145,24 @@ impl<H: HashDRBG80090AParams> HashDRBG80090A<H> {
                 prediction_resistance: false,
                 instantiated: false,
             },
+            _phantom: core::marker::PhantomData,
         }
     }
 
     /// Creates a new instance using the local OS RNG as a source of seed entropy.
+    #[cfg(feature = "os_rng")]
     pub fn new_from_os() -> Self {
         let mut seed = KeyMaterial512::new();
         seed.allow_hazardous_operations();
         seed.set_key_type(KeyType::Seed).unwrap();
         match H::HASH {
             SupportedHash::SHA256 => {
-                getrandom::fill(&mut seed.mut_ref_to_bytes().unwrap()[..32]).unwrap();
+                getrandom::getrandom(&mut seed.mut_ref_to_bytes().unwrap()[..32]).unwrap();
                 seed.set_key_len(32).unwrap();
                 seed.set_security_strength(SecurityStrength::_128bit).unwrap();
             }
             SupportedHash::SHA512 => {
-                getrandom::fill(&mut seed.mut_ref_to_bytes().unwrap()).unwrap();
+                getrandom::getrandom(&mut seed.mut_ref_to_bytes().unwrap()).unwrap();
                 seed.set_key_len(64).unwrap();
                 seed.set_security_strength(SecurityStrength::_256bit).unwrap();
             }
@@ -161,6 +175,7 @@ impl<H: HashDRBG80090AParams> HashDRBG80090A<H> {
     }
 }
 
+#[cfg(feature = "os_rng")]
 impl<H: HashDRBG80090AParams> Default for HashDRBG80090A<H> {
     /// Creates a new instance using the local OS RNG as a source of seed entropy.
     /// Alias for [HashDRBG80090A::new_from_os].
@@ -467,6 +482,7 @@ impl<H: HashDRBG80090AParams> Sp80090ADrbg for HashDRBG80090A<H> {
     }
 }
 
+#[cfg(feature = "os_rng")]
 impl<H: HashDRBG80090AParams> RNG for HashDRBG80090A<H> {
     // TODO: add this back once we figure out how to handle a streaming-style reseed.
     // fn add_seed_bytes(&mut self, additional_seed: &[u8]) -> Result<(), RNGError> {
@@ -523,7 +539,11 @@ fn hash_df<H: Hash + HashAlgParams + Default>(
 
     // out is "temp" in SP 800-90Ar1
     let no_of_bits_to_return: u32 = (out.len() * 8) as u32;
-    let len = u32::div_ceil(out.len() as u32, H::OUTPUT_LEN as u32);
+    let len: u32 = {
+        let x = out.len() as u32;
+        let d = H::OUTPUT_LEN as u32;
+        (x + d - 1) / d
+    };
     let mut counter: u8 = 0x01;
 
     // note: this could probably be performance optimized a tiny bit by pulling no_of_bits_to_return.to_le_bytes() out of the loop
@@ -564,6 +584,7 @@ fn hash_df<H: Hash + HashAlgParams + Default>(
     }
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_hash_df() {
     // success case
@@ -614,7 +635,11 @@ fn hashgen<H: Hash + HashAlgParams + Default>(v: &[u8], out: &mut [u8]) {
     // 6. Return (returned_bits).
 
     // 1. m = ceil(requested_no_of_bits / outlen)
-    let m = u32::div_ceil(out.len() as u32, H::OUTPUT_LEN as u32);
+    let m: u32 = {
+        let x = out.len() as u32;
+        let d = H::OUTPUT_LEN as u32;
+        (x + d - 1) / d
+    };
 
     // requested_no_of_bits = out.len()
     // let mut data= [0u8; H::OUTPUT_LEN];

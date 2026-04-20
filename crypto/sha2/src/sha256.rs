@@ -1,4 +1,7 @@
 use crate::{SHA2Params};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::TryInto;
 use core::slice;
 use bouncycastle_core_interface::errors::HashError;
 use bouncycastle_core_interface::traits::{Hash, SecurityStrength};
@@ -49,7 +52,7 @@ fn theta1(x: u32) -> u32 {
 // #[derive(Clone, Copy)]
 #[derive(Clone)]
 pub(crate) struct Sha256State<PARAMS: SHA2Params> {
-    _params: std::marker::PhantomData<PARAMS>,
+    _params: core::marker::PhantomData<PARAMS>,
     h: [u32; 8],
 }
 
@@ -63,14 +66,14 @@ impl<PARAMS: SHA2Params> Sha256State<PARAMS> {
     pub(crate) fn new() -> Self {
         match PARAMS::OUTPUT_LEN * 8 {
             224 => Self {
-                _params: std::marker::PhantomData,
+                _params: core::marker::PhantomData,
                 h: [
                     0xC1059ED8, 0x367CD507, 0x3070DD17, 0xF70E5939, 0xFFC00B31, 0x68581511,
                     0x64F98FA7, 0xBEFA4FA4,
                 ],
             },
             256 => Self {
-                _params: std::marker::PhantomData,
+                _params: core::marker::PhantomData,
                 h: [
                     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C,
                     0x1F83D9AB, 0x5BE0CD19,
@@ -87,9 +90,8 @@ impl<PARAMS: SHA2Params> Sha256State<PARAMS> {
         let &mut [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = s;
 
         for block in blocks {
-            let (chunks, _remainder) = block.as_chunks::<4>();
-            for (i, w) in x[..16].iter_mut().zip(chunks) {
-                *i = u32::from_be_bytes(*w);
+            for (i, chunk) in x[..16].iter_mut().zip(block.chunks_exact(4)) {
+                *i = u32::from_be_bytes(chunk.try_into().unwrap());
             }
 
             for i in 16..64 {
@@ -149,7 +151,7 @@ impl<PARAMS: SHA2Params> Sha256State<PARAMS> {
 // #[derive(Clone, Copy)]
 #[derive(Clone)]
 pub struct SHA256Internal<PARAMS: SHA2Params> {
-    _params: std::marker::PhantomData<PARAMS>,
+    _params: core::marker::PhantomData<PARAMS>,
     state: Sha256State<PARAMS>,
     byte_count: u64,
     x_buf: [u8; 64],
@@ -165,7 +167,7 @@ impl<PARAMS: SHA2Params> Drop for SHA256Internal<PARAMS> {
 impl<PARAMS: SHA2Params> SHA256Internal<PARAMS> {
     pub fn new() -> Self {
         Self {
-            _params: std::marker::PhantomData,
+            _params: core::marker::PhantomData,
             state: Sha256State::<PARAMS>::new(),
             byte_count: 0,
             x_buf: [0; 64],
@@ -225,10 +227,14 @@ impl<PARAMS: SHA2Params> Hash for SHA256Internal<PARAMS> {
             self.state.compress(slice::from_ref(&self.x_buf));
         }
 
-        let (chunks, remainder) = block.as_chunks::<64>();
-
-        self.state.compress(chunks);
-
+        let full_len = (block.len() / 64) * 64;
+        let mut idx = 0;
+        while idx < full_len {
+            let chunk: &[u8; 64] = (&block[idx..idx + 64]).try_into().unwrap();
+            self.state.compress(slice::from_ref(chunk));
+            idx += 64;
+        }
+        let remainder = &block[full_len..];
         let remaining = remainder.len();
         self.x_buf[..remaining].copy_from_slice(remainder);
         self.x_buf_off = remaining;
@@ -264,7 +270,7 @@ impl<PARAMS: SHA2Params> Hash for SHA256Internal<PARAMS> {
         for i in 0..(n / 4) {
             output[i * 4..i * 4 + 4].copy_from_slice(&h[i].to_be_bytes());
         }
-        if !n.is_multiple_of(4) {
+        if n % 4 != 0 {
             output[((n / 4) * 4)..((n / 4) * 4) + (n % 4)]
                 .copy_from_slice(&h[n / 4].to_be_bytes()[0..(n % 4)]);
         }

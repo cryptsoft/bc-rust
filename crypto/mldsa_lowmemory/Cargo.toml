@@ -1,22 +1,25 @@
 [package]
 name = "bouncycastle-mldsa-lowmemory"
 version = "0.1.2"
-edition.workspace = true
+edition = "2018"
+
+[workspace]
+
+[features]
+default = ["std"]
+std = [
+    "bouncycastle-core-interface/std",
+    "bouncycastle-sha2/std",
+    "bouncycastle-sha3/std",
+    "bouncycastle-rng/std",
+    "bouncycastle-utils/std",
+    "hex/std",
+]
 
 [dependencies]
-bouncycastle-core-interface.workspace = true
-bouncycastle-sha2.workspace = true
-bouncycastle-sha3.workspace = true
-bouncycastle-rng.workspace = true
-bouncycastle-utils.workspace = true
-hex = "0.4.3"
-
-[dev-dependencies]
-bouncycastle-core-test-framework.workspace = true
-bouncycastle-hex.workspace = true
-bouncycastle-rng.workspace = true
-criterion.workspace = true
-
-[[bench]]
-name = "mldsa_benches"
-harness = false
+bouncycastle-core-interface = { path = "../core-interface", version = "0.1.1", default-features = false }
+bouncycastle-sha2 = { path = "../sha2", version = "0.1.1", default-features = false }
+bouncycastle-sha3 = { path = "../sha3", version = "0.1.1", default-features = false }
+bouncycastle-rng = { path = "../rng", version = "0.1.1", default-features = false }
+bouncycastle-utils = { path = "../utils", version = "0.1.1", default-features = false }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }

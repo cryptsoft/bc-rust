@@ -1,18 +1,14 @@
 [package]
 name = "bouncycastle-sha3"
 version = "0.1.1"
-edition.workspace = true
+edition = "2018"
+
+[workspace]
+
+[features]
+default = ["std"]
+std = ["bouncycastle-core-interface/std", "bouncycastle-utils/std"]
 
 [dependencies]
-bouncycastle-core-interface.workspace = true
-bouncycastle-utils.workspace = true
-
-[dev-dependencies]
-bouncycastle-core-test-framework.workspace = true
-criterion.workspace = true
-bouncycastle-hex.workspace = true
-bouncycastle-rng.workspace = true
-
-[[bench]]
-name = "sha3_benches"
-harness = false
+bouncycastle-core-interface = { path = "../core-interface", version = "0.1.1", default-features = false }
+bouncycastle-utils = { path = "../utils", version = "0.1.1", default-features = false }

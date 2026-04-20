@@ -306,7 +306,7 @@ pub fn ct_eq_bytes(a: &[u8], b: &[u8]) -> bool {
     }
     let mut result = 0u8;
     for i in 0..a.len() {
-        result |= std::hint::black_box(a[i] ^ b[i]);
+        result |= core::hint::black_box(a[i] ^ b[i]);
     }
     result == 0
 }
@@ -316,7 +316,7 @@ pub fn ct_eq_bytes(a: &[u8], b: &[u8]) -> bool {
 pub fn ct_eq_zero_bytes(a: &[u8]) -> bool {
     let mut result = 0u8;
     for i in 0..a.len() {
-        result |= std::hint::black_box(a[i]);
+        result |= core::hint::black_box(a[i]);
     }
     result == 0
 }

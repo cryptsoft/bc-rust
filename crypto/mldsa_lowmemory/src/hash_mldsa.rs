@@ -88,11 +88,18 @@ use crate::mldsa_keys::{MLDSAPrivateKeyInternalTrait, MLDSAPublicKeyInternalTrai
 use crate::{MLDSA, MLDSA44PrivateKey, MLDSA44PublicKey, MLDSA65PrivateKey, MLDSA65PublicKey, MLDSA87PrivateKey, MLDSA87PublicKey, MLDSAPrivateKeyTrait, MLDSAPublicKeyTrait};
 use bouncycastle_core_interface::errors::SignatureError;
 use bouncycastle_core_interface::key_material::KeyMaterialSized;
-use bouncycastle_core_interface::traits::{Hash, PHSignature, RNG, Signature, XOF, Algorithm, SecurityStrength};
+use bouncycastle_core_interface::traits::{Hash, PHSignature, Signature, XOF, Algorithm, SecurityStrength};
+#[cfg(feature = "os_rng")]
+use bouncycastle_core_interface::traits::RNG;
+#[cfg(feature = "os_rng")]
 use bouncycastle_rng::HashDRBG_SHA512;
 use bouncycastle_sha2::{SHA256, SHA512};
 
 // Imports needed only for docs
+#[allow(unused_imports)]
+use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::TryInto;
 #[allow(unused_imports)]
 use crate::mldsa::MuBuilder;
 
@@ -719,7 +726,7 @@ impl<
         output: &mut [u8],
     ) -> Result<usize, SignatureError> {
         let mut ph_m = [0u8; PH_LEN];
-        _ = HASH::default().hash_out(msg, &mut ph_m);
+        let _ = HASH::default().hash_out(msg, &mut ph_m);
         Self::sign_ph_out(sk, &ph_m, ctx, output)
     }
 
@@ -769,9 +776,14 @@ impl<
             let rnd = if self.signer_rnd.is_some() {
                 self.signer_rnd.unwrap()
             } else {
-                let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
-                HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
-                rnd
+                #[cfg(feature = "os_rng")]
+                {
+                    let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
+                    HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
+                    rnd
+                }
+                #[cfg(not(feature = "os_rng"))]
+                { [0u8; RND_LEN] }
             };
             // since at this point we need to fully reconstruct SK in order to compute tr for mu anyway
             // there is no savings to using the fancy MLDSA::sign_from_seed
@@ -782,7 +794,7 @@ impl<
 
     fn verify(pk: &PK, msg: &[u8], ctx: Option<&[u8]>, sig: &[u8]) -> Result<(), SignatureError> {
         let mut ph_m = [0u8; PH_LEN];
-        _ = HASH::default().hash_out(msg, &mut ph_m);
+        let _ = HASH::default().hash_out(msg, &mut ph_m);
 
         Self::verify_ph(pk, &ph_m, ctx, sig)
     }
@@ -900,8 +912,14 @@ impl<
         }
         let output_sized: &mut [u8; SIG_LEN] = output[..SIG_LEN].as_mut().try_into().unwrap();
 
-        let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
-        HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
+        #[cfg(feature = "os_rng")]
+        let rnd: [u8; RND_LEN] = {
+            let mut rnd: [u8; RND_LEN] = [0u8; RND_LEN];
+            HashDRBG_SHA512::new_from_os().next_bytes_out(&mut rnd)?;
+            rnd
+        };
+        #[cfg(not(feature = "os_rng"))]
+        let rnd: [u8; RND_LEN] = [0u8; RND_LEN];
         Self::sign_ph_deterministic_out(sk, ctx, ph, rnd, output_sized)
     }
 
@@ -937,7 +955,7 @@ impl<
         h.absorb(oid);
         h.absorb(ph);
         let mut mu = [0u8; MU_LEN];
-        _ = h.squeeze_out(&mut mu);
+        let _ = h.squeeze_out(&mut mu);
 
         if MLDSA::<
             PK_LEN,
